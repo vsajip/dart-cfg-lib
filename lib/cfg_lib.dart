@@ -16,31 +16,38 @@ import 'src/parser.dart';
 
 var _IDENTIFIER_PATTERN = RegExp(r"^[\p{L}_][\p{L}\p{Nd}_]*$", unicode: true);
 
+/// The base class of exceptions thrown for high-level configuration errors.
 class ConfigException extends RecognizerException {
   ConfigException(String message, Location? loc) : super(message, loc);
 }
 
+/// An exception of this type is thrown for invalid paths.
 class InvalidPathException extends ConfigException {
   InvalidPathException(String message, Location? loc) : super(message, loc);
 }
 
+/// An exception of this type is thrown when an index is invalid.
 class BadIndexException extends ConfigException {
   BadIndexException(String message, Location? loc) : super(message, loc);
 }
 
+/// An exception of this type is thrown when references can't be resolved
+/// because they point to themselves directly or indirectly.
 class CircularReferenceException extends ConfigException {
   CircularReferenceException(String message, Location? loc)
       : super(message, loc);
 }
 
+/// This function is public only to facilitate tests.
 bool isIdentifier(String s) {
   return _IDENTIFIER_PATTERN.hasMatch(s);
 }
 
-bool sameFile(String p1, String p2) {
+bool _sameFile(String p1, String p2) {
   return p.canonicalize(p1) == p.canonicalize(p2);
 }
 
+/// This function is public only to facilitate tests.
 ASTNode parsePath(String s) {
   var p = Parser.fromSource(s);
   var result = p.primary();
@@ -50,6 +57,7 @@ ASTNode parsePath(String s) {
   return result;
 }
 
+/// This function is public only to facilitate tests.
 String toSource(ASTNode node) {
   String result;
 
@@ -123,11 +131,11 @@ String _stringFor(dynamic v) {
   return result;
 }
 
-class PathElement {
+class _PathElement {
   TokenKind op;
   ASTNode operand;
 
-  PathElement(this.op, this.operand);
+  _PathElement(this.op, this.operand);
 
   @override
   String toString() {
@@ -135,17 +143,17 @@ class PathElement {
   }
 }
 
-List<PathElement> _unpackPath(ASTNode node) {
-  List<PathElement> result = [];
+List<_PathElement> _unpackPath(ASTNode node) {
+  List<_PathElement> result = [];
 
   void visit(ASTNode n) {
     if (n is Token) {
-      result.add(PathElement(TokenKind.Dot, n));
+      result.add(_PathElement(TokenKind.Dot, n));
     } else if (n is UnaryNode) {
       visit(n.operand);
     } else if (n is BinaryNode) {
       visit(n.lhs);
-      result.add(PathElement(n.kind, n.rhs));
+      result.add(_PathElement(n.kind, n.rhs));
     }
   }
 
@@ -155,6 +163,7 @@ List<PathElement> _unpackPath(ASTNode node) {
 
 const _MISSING = Object();
 
+/// The type of a function which converts backtick-strings to objects.
 typedef StringConverter = dynamic Function(String s, Config cfg);
 
 var _ISO_DATETIME_PATTERN = RegExp(
@@ -260,20 +269,35 @@ dynamic _defaultStringConverter(String s, Config cfg) {
   return result;
 }
 
+/// This class represents a configuration (both top-level and included).
 class Config {
+  /// Whether duplicate keys are allowed in this configuration.
   bool noDuplicates = true;
+
+  /// Whether backtick-string conversion is strict (must always succeed).
   bool strictConversions = true;
+
+  /// Locations searched for included configurations.
   List<String> includePath = [];
+
+  /// Where this configuration was loaded from.
   String? path;
+
+  /// The parent configuration of this one.
   Config? parent;
   Map<String, ASTNode>? _data;
   Map<String, dynamic>? _cache;
+
+  /// A lookup table for variables in the configuration.
   Map<String, dynamic> context = {};
   final Set<ASTNode> _refsSeen = <ASTNode>{};
+
+  /// Update this if you need custom backtick-string conversion.
   StringConverter stringConverter = _defaultStringConverter;
-  String get rootDir =>
+  String get _rootDir =>
       (path == null) ? Directory.current.path : p.dirname(path!);
 
+  /// Whether configuration values are cached by key.
   bool get cached => (_cache != null);
   set cached(bool cached) {
     if (cached) {
@@ -286,11 +310,13 @@ class Config {
   Config();
 
   Config.fromStream(Stream stream) {
-    load(stream);
+    _load(stream);
   }
 
+  /// Construct a new configuration from the CFG text in [source].
   Config.fromSource(String source) : this.fromStream(Stream(source));
   // Config.fromFile(String path) : this.fromSource(File(path).readAsStringSync());
+  /// Construct a new configuration from the CFG text in the file at [path].
   factory Config.fromFile(String path) {
     var result = Config.fromSource(File(path).readAsStringSync());
     // ignore: prefer_initializing_formals
@@ -307,23 +333,25 @@ class Config {
     return 'Config($bn)';
   }
 
+  /// Overwrite the contents of this configuration with the configuration at
+  /// [path].
   void loadFile(String path) {
-    load(Stream(File(path).readAsStringSync()));
+    _load(Stream(File(path).readAsStringSync()));
     this.path = path;
   }
 
-  void load(Stream stream) {
+  void _load(Stream stream) {
     var p = Parser.fromStream(stream);
     var node = p.container();
 
     if (node is! MappingNode) {
       throw ConfigException('Root configuration must be a mapping', null);
     }
-    _data = wrapMapping(node);
+    _data = _wrapMapping(node);
     _cache?.clear();
   }
 
-  Map<String, ASTNode> wrapMapping(MappingNode node) {
+  Map<String, ASTNode> _wrapMapping(MappingNode node) {
     Map<String, ASTNode> result = {};
     Map<String, Location>? seen = noDuplicates ? {} : null;
 
@@ -344,6 +372,8 @@ class Config {
     return result;
   }
 
+  /// Get a value from this configuration by [key]. If not present, return any
+  /// default if specified in [dv].
   dynamic get(String key, {dynamic dv = _MISSING}) {
     dynamic result;
 
@@ -353,7 +383,7 @@ class Config {
       throw ConfigException('No data in configuration', null);
     } else {
       if (_data!.containsKey(key)) {
-        result = evaluate(_data![key]!);
+        result = _evaluate(_data![key]!);
       } else if (isIdentifier(key)) {
         if (identical(dv, _MISSING)) {
           throw ConfigException('Not found in configuration: $key', null);
@@ -389,6 +419,8 @@ class Config {
     return result;
   }
 
+  /// Get a value from this configuration by [key]. Throw an exception if it
+  /// can't be found.
   operator [](String key) {
     return get(key, dv: _MISSING);
   }
@@ -398,14 +430,14 @@ class Config {
 
     // print('*** AL < $list');
     for (var node in list) {
-      dynamic rv = evaluate(node);
+      dynamic rv = _evaluate(node);
 
       if (rv is ListNode) {
         rv = _asList(rv.elements);
       } else if (rv is List<ASTNode>) {
         rv = _asList(rv);
       } else if (rv is MappingNode) {
-        var m = wrapMapping(rv);
+        var m = _wrapMapping(rv);
         rv = _asDict(m);
       } else if (rv is Map<String, ASTNode>) {
         rv = _asDict(rv);
@@ -424,13 +456,13 @@ class Config {
 
     // print('*** AD < $d');
     d.forEach((key, value) {
-      dynamic rv = evaluate(value);
+      dynamic rv = _evaluate(value);
 
       // print('*** AD - $key: $value');
       if (rv is Token) {
         rv = rv.value;
       } else if (rv is MappingNode) {
-        var m = wrapMapping(rv);
+        var m = _wrapMapping(rv);
         rv = _asDict(m);
       } else if (rv is Map<String, ASTNode>) {
         rv = _asDict(rv);
@@ -447,6 +479,8 @@ class Config {
     return result;
   }
 
+  /// Convert the contents of this configuraton to a Map, recursing into
+  /// subconfigurations.
   Map<String, dynamic> asDict() {
     if (_data == null) {
       throw ConfigException('No data in configuration', null);
@@ -454,7 +488,7 @@ class Config {
     return _asDict(_data!);
   }
 
-  dynamic evaluate(ASTNode node) {
+  dynamic _evaluate(ASTNode node) {
     dynamic result;
 
     if (node is Token) {
@@ -470,7 +504,7 @@ class Config {
         result = node.value;
       }
     } else if (node is MappingNode) {
-      result = wrapMapping(node);
+      result = _wrapMapping(node);
     } else if (node is ListNode) {
       result = node.elements;
     } else {
@@ -587,7 +621,7 @@ class Config {
           throw BadIndexException(
               'Invalid container for numeric index: $current', loc);
         }
-        var idx = config.evaluate(pe.operand);
+        var idx = config._evaluate(pe.operand);
         if (idx is! int) {
           throw ConfigException('Invalid index $idx', loc);
         }
@@ -611,7 +645,7 @@ class Config {
             'Invalid path element ${pe.op}', pe.operand.start);
       }
       if (current is ASTNode) {
-        current = config.evaluate(current);
+        current = config._evaluate(current);
       }
       if (current is Config) {
         config = current;
@@ -633,7 +667,7 @@ class Config {
       List<dynamic> rv = [];
 
       for (var element in v) {
-        var e = (element is ASTNode) ? evaluate(element) : element;
+        var e = (element is ASTNode) ? _evaluate(element) : element;
         rv.add(e);
       }
       result = rv;
@@ -653,7 +687,7 @@ class Config {
 
   dynamic _evalAt(UnaryNode node) {
     dynamic result;
-    var fn = evaluate(node.operand);
+    var fn = _evaluate(node.operand);
     var loc = node.operand.start; // for error reporting
 
     if (fn is! String) {
@@ -667,7 +701,7 @@ class Config {
       fp = fn;
       found = true;
     } else {
-      fp = p.join(rootDir, fn);
+      fp = p.join(_rootDir, fn);
       if (File(fp).existsSync()) {
         found = true;
       } else {
@@ -683,7 +717,7 @@ class Config {
     if (!found) {
       throw ConfigException('Unable to locate $fn', loc);
     }
-    if ((path != null) && File(path!).existsSync() && sameFile(path!, fp!)) {
+    if ((path != null) && File(path!).existsSync() && _sameFile(path!, fp!)) {
       throw ConfigException('Configuration cannot include itself: $fn', loc);
     }
     var parser = Parser.fromFile(fp!);
@@ -703,7 +737,7 @@ class Config {
       cfg.includePath = includePath;
       cfg.cached = cached;
       cfg.parent = this;
-      cfg._data = wrapMapping(container);
+      cfg._data = _wrapMapping(container);
       result = cfg;
     }
     return result;
@@ -776,8 +810,8 @@ class Config {
   }
 
   dynamic _evalAdd(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
     dynamic result;
 
     void cannot() {
@@ -809,7 +843,7 @@ class Config {
   }
 
   dynamic _evalNegate(UnaryNode node) {
-    var operand = evaluate(node.operand);
+    var operand = _evaluate(node.operand);
     dynamic result;
 
     void cannot() {
@@ -837,8 +871,8 @@ class Config {
   }
 
   dynamic _evalSubtract(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
     dynamic result;
 
     void cannot() {
@@ -866,8 +900,8 @@ class Config {
   }
 
   dynamic _evalMultiply(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
     dynamic result;
 
     void cannot() {
@@ -883,8 +917,8 @@ class Config {
   }
 
   dynamic _evalDivide(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
     dynamic result;
 
     void cannot() {
@@ -900,8 +934,8 @@ class Config {
   }
 
   dynamic _evalIntegerDivide(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
     dynamic result;
 
     void cannot() {
@@ -917,8 +951,8 @@ class Config {
   }
 
   dynamic _evalModulo(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
     dynamic result;
 
     void cannot() {
@@ -934,8 +968,8 @@ class Config {
   }
 
   dynamic _evalLeftShift(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
     dynamic result;
 
     void cannot() {
@@ -951,8 +985,8 @@ class Config {
   }
 
   _evalRightShift(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
     dynamic result;
 
     void cannot() {
@@ -968,8 +1002,8 @@ class Config {
   }
 
   _evalPower(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
     dynamic result;
 
     void cannot() {
@@ -988,28 +1022,28 @@ class Config {
   }
 
   _evalLogicalAnd(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
+    var lhs = _evaluate(node.lhs);
 
     if (!(lhs as bool)) {
       return lhs;
     }
-    return evaluate(node.rhs);
+    return _evaluate(node.rhs);
   }
 
   _evalLogicalOr(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
+    var lhs = _evaluate(node.lhs);
 
     if (lhs as bool) {
       return lhs;
     }
-    return evaluate(node.rhs);
+    return _evaluate(node.rhs);
   }
 
   _evalComplement(UnaryNode node) {}
 
   _evalBitwiseAnd(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
 
     void cannot() {
       throw ConfigException('Cannot bitwise-and $lhs and $rhs', node.start);
@@ -1025,8 +1059,8 @@ class Config {
   }
 
   _evalBitwiseOr(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
 
     void cannot() {
       throw ConfigException('Cannot bitwise-or $lhs and $rhs', node.start);
@@ -1042,8 +1076,8 @@ class Config {
   }
 
   _evalBitwiseXor(BinaryNode node) {
-    var lhs = evaluate(node.lhs);
-    var rhs = evaluate(node.rhs);
+    var lhs = _evaluate(node.lhs);
+    var rhs = _evaluate(node.rhs);
 
     void cannot() {
       throw ConfigException('Cannot bitwise-xor $lhs and $rhs', node.start);
@@ -1066,7 +1100,7 @@ class Config {
     if (sn.step == null) {
       step = 1;
     } else {
-      step = evaluate(sn.step!);
+      step = _evaluate(sn.step!);
       if (step is! int) {
         throw ConfigException(
             'Step is not an integer, but $step (${step.runtimeType})',
@@ -1079,7 +1113,7 @@ class Config {
     if (sn.startIndex == null) {
       start = 0;
     } else {
-      start = evaluate(sn.startIndex!);
+      start = _evaluate(sn.startIndex!);
       if (start is! int) {
         throw ConfigException(
             'Start is not an integer, but $start (${start.runtimeType})',
@@ -1098,7 +1132,7 @@ class Config {
     if (sn.stopIndex == null) {
       stop = size - 1;
     } else {
-      stop = evaluate(sn.stopIndex!);
+      stop = _evaluate(sn.stopIndex!);
       if (stop is! int) {
         throw ConfigException(
             'Stop is not an integer, but $stop (${stop.runtimeType})',

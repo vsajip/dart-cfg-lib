@@ -1,6 +1,6 @@
 name: cfg_lib
 description: A Dart library for working with the CFG configuration format.
-version: 0.1.1
+version: 0.1.2
 homepage: https://docs.red-dove.com/cfg/index.html
 repository: https://github.com/vsajip/dart-cfg-lib
 

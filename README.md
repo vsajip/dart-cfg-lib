@@ -7,7 +7,7 @@ A Dart library for working with the CFG configuration format.
 The package can be installed by adding `cfg_lib` to your list of dependencies in `pubspec.yaml`:
 
 ```yaml
-cfg_lib: ^0.1.0
+cfg_lib: ^0.1.1
 ```
 
 ## Usage
