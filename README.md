@@ -45,17 +45,14 @@ home: `$HOME`
 foo: `$FOO|bar`
 ```
 
-You can load and query the above configuration using [iex](https://hexdocs.pm/iex/IEx.html):
+You can load and query the above configuration using [Repl.it](https://replit.com/join/lrrwrhazkb-vsajip):
 
 Loading a configuration
 -----------------------
 
-The configuration above can be loaded as shown below. In the REPL shell:
-```text
-iex(1)> alias CFG.Config
-CFG.Config
-iex(2)> {:ok, cfg} = Config.from_file("test0.cfg")
-{:ok, #PID<0.218.0>}
+The configuration above can be loaded as shown below:
+```dart
+var cfg = Config.fromFile('test0.cfg');
 ```
 
 The successful call returns a `Config` which can be used to query the configuration.
@@ -63,59 +60,76 @@ The successful call returns a `Config` which can be used to query the configurat
 Access elements with keys
 -------------------------
 Accessing elements of the configuration with a simple key is not much harder than using a map:
-```text
-iex(3)> Config.get(cfg, "a")
-{:ok, "Hello, "}
-iex(4)> Config.get(cfg, "b")
-{:ok, "world!"}
+```dart
+print('a is "${cfg['a']}"');
+print('b is "${cfg['b']}"');
+```
+
+which prints:
+
+```shell
+a is "Hello, "
+b is "world!"
 ```
 
 Access elements with paths
 --------------------------
 As well as simple keys, elements can also be accessed using path strings:
-```text
-iex(5)> Config.get(cfg, "c.d")
-{:ok, "e"}
+```dart
+print('c.d is "${cfg['c.d']}"');
+```
+
+which prints:
+
+```shell
+c.d is "e"
 ```
 Here, the desired value is obtained in a single step, by (under the hood) walking the path `c.d` – first getting the mapping at key `c`, and then the value at `d` in the resulting mapping.
 
 Note that you can have simple keys which look like paths:
-```text
-iex(6)> Config.get(cfg, "f.g")
-{:ok, "h"}
+```dart
+print('f.g is "${cfg['f.g']}"');
 ```
+which prints:
+
+```shell
+f.g is "h"
+```
+
 If a key is given that exists in the configuration, it is used as such, and if it is not present in the configuration, an attempt is made to interpret it as a path. Thus, `f.g` is present and accessed via key, whereas `c.d` is not an existing key, so is interpreted as a path.
 
 Access to date/time objects
 ---------------------------
 You can also get native Elixir date/time objects from a configuration, by using an ISO date/time pattern in a backtick-string:
-```text
-iex(7)> Config.get(cfg, "christmas_morning")
-{:ok, ~U[2019-12-25 08:39:49.000000Z]}
+```dart
+print('Christmas morning is ${cfg['christmas_morning']} (${cfg['christmas_morning'].runtimeType})');
 ```
-Access to other Elixir/Erlang objects
----------------------------------------
-Access to other Elixir/Erlang objects is also possible using the backtick-string syntax, provided that they are one of:
-* Environment variables
-* Public functions in public modules which take no arguments
-```text
-iex(8)> {:ok, dt} = Config.get(cfg, "now")
-{:ok, ~U[2021-10-16 12:37:37.781391Z]}
-iex(9)> DateTime.diff(DateTime.utc_now, dt)
-6
- ```
+
+which prints:
+```shell
+Christmas morning is 2019-12-25 08:39:49.000Z (DateTime)
+```
+As Dart doesn’t currently support timezone-aware date/times out of the box, currently the approach used is to compute the offset and add to the UTC time to yield the result. Although there are some third-party timezone-aware libraries around, they don’t allow computing an offset and setting it on the date/time - they work from timezone names.
 
 Access to environment variables
 -------------------------------
 To access an environment variable, use a backtick-string of the form `$VARNAME`:
-```text
-iex(10)> elem(Config.get(cfg, "home"), 1) == System.get_env("HOME")
-true
-```
-You can specify a default value to be used if an environment variable isn’t present using the `$VARNAME|default-value` form. Whatever string follows the pipe character (including the empty string) is returned if the VARNAME is not a variable in the environment.
-```text
-iex(11)> Config.get(cfg, "foo")
-{:ok, "bar"}
+```dart
+print(cfg['home'] == Platform.environment['HOME']);
 ```
 
+which prints:
+```shell
+true
+```
+
+You can specify a default value to be used if an environment variable isn’t present using the `$VARNAME|default-value` form. Whatever string follows the pipe character (including the empty string) is returned if the VARNAME is not a variable in the environment.
+```dart
+print('foo is "${cfg['foo']}"');
+```
+
+which prints:
+```shell
+foo is "bar"
+```
 For more information, see [the CFG documentation](https://docs.red-dove.com/cfg/index.html).
