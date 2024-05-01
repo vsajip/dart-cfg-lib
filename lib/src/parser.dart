@@ -9,7 +9,7 @@ class ParserException extends RecognizerException {
   ParserException(String message, Location? loc) : super(message, loc);
 }
 
-Set<TokenKind> value_STARTERS = {
+Set<TokenKind> _VALUE_STARTERS = {
   TokenKind.Word,
   TokenKind.Integer,
   TokenKind.Float,
@@ -309,7 +309,7 @@ class Parser {
     var kind = _next.kind;
     Token result;
 
-    if (!value_STARTERS.contains(kind)) {
+    if (!_VALUE_STARTERS.contains(kind)) {
       throw ParserException('Unexpected for value: $kind', _next.start);
     }
     if (kind == TokenKind.String) {
@@ -346,9 +346,6 @@ class Parser {
         _expect(TokenKind.RightParenthesis);
         break;
       default:
-        if (!value_STARTERS.contains(kind)) {
-          throw ParserException('Unexpected for value: $kind', _next.start);
-        }
         result = value();
         break;
     }
