@@ -554,7 +554,7 @@ class Parser {
       result = _power();
     } else {
       _advance();
-      return UnaryNode(kind, unaryExpr());
+      result = UnaryNode(kind, unaryExpr());
     }
     result.start = spos;
     return result;
