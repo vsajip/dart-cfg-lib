@@ -1,4 +1,4 @@
-# CFG.Config
+# cfg_lib
 
 A Dart library for working with the CFG configuration format.
 
@@ -9,6 +9,8 @@ The package can be installed by adding `cfg_lib` to your list of dependencies in
 ```yaml
 cfg_lib: ^0.1.1
 ```
+
+There’s a minimal example of a program that uses CFG [here](https://github.com/vsajip/cfgclient/tree/main/dart).
 
 ## Usage
 
