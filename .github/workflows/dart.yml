@@ -7,6 +7,9 @@ on:
   pull_request:
     branches: [ main ]
 
+  schedule:  # at 03:06 on day-of-month 12
+    - cron: '6 3 12 * *'
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -17,7 +20,7 @@ jobs:
         sdk: ['stable', 'dev']
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Set up Dart
       uses: dart-lang/setup-dart@v1
       with:
